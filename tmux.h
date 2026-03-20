@@ -41,6 +41,7 @@ extern char   **environ;
 struct args;
 struct args_command_state;
 struct client;
+struct client_sidebar_state;
 struct cmd;
 struct cmd_find_state;
 struct cmdq_item;
@@ -1946,6 +1947,19 @@ typedef void (*overlay_draw_cb)(struct client *, void *,
 typedef int (*overlay_key_cb)(struct client *, void *, struct key_event *);
 typedef void (*overlay_free_cb)(struct client *, void *);
 typedef void (*overlay_resize_cb)(struct client *, void *);
+
+struct client_sidebar_state {
+	int			 visible;
+	int			 focus;
+	u_int			 width;
+	int			 has_override;
+	int			 override_visible;
+	u_int			 selected_session_id;
+};
+
+extern const struct client_sidebar_state client_sidebar_state_default;
+void	 client_sidebar_state_init(struct client_sidebar_state *);
+
 struct client {
 	const char		*name;
 	struct tmuxpeer		*peer;
@@ -1996,6 +2010,7 @@ struct client {
 
 	struct status_line	 status;
 	enum client_theme	 theme;
+	struct client_sidebar_state	 sidebar;
 
 	struct input_requests	 input_requests;
 

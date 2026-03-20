@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 static void	screen_redraw_draw_borders(struct screen_redraw_ctx *);
 static void	screen_redraw_draw_panes(struct screen_redraw_ctx *);
@@ -657,6 +658,7 @@ screen_redraw_screen(struct client *c)
 
 	tty_sync_start(&c->tty);
 	tty_update_mode(&c->tty, c->tty.mode, NULL);
+	sidebar_draw(&ctx);
 
 	if (flags & (CLIENT_REDRAWWINDOW|CLIENT_REDRAWBORDERS)) {
 		log_debug("%s: redrawing borders", c->name);

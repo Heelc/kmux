@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 static int	tty_log_fd = -1;
 
@@ -953,12 +954,13 @@ tty_window_offset1(struct tty *tty, u_int *ox, u_int *oy, u_int *sx, u_int *sy)
 	struct client		*c = tty->client;
 	struct window		*w = c->session->curw->window;
 	struct window_pane	*wp = server_client_get_pane(c);
-	u_int			 cx, cy, lines;
+	u_int			 cx, cy, lines, offset;
 
 	lines = status_line_size(c);
+	offset = sidebar_client_offset(c, tty->sx);
 
 	if (tty->sx >= w->sx && tty->sy - lines >= w->sy) {
-		*ox = 0;
+		*ox = offset;
 		*oy = 0;
 		*sx = w->sx;
 		*sy = w->sy;
@@ -981,6 +983,11 @@ tty_window_offset1(struct tty *tty, u_int *ox, u_int *oy, u_int *sx, u_int *sy)
 		else if (c->pan_oy + *sy > w->sy)
 			c->pan_oy = w->sy - *sy;
 		*oy = c->pan_oy;
+		if (offset != 0) {
+			if (*sx == tty->sx && *sx > offset)
+				*sx -= offset;
+			*ox += offset;
+		}
 		return (1);
 	}
 
@@ -1007,6 +1014,11 @@ tty_window_offset1(struct tty *tty, u_int *ox, u_int *oy, u_int *sx, u_int *sy)
 	}
 
 	c->pan_window = NULL;
+	if (offset != 0) {
+		if (*sx == tty->sx && *sx > offset)
+			*sx -= offset;
+		*ox += offset;
+	}
 	return (1);
 }
 

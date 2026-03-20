@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 /*
  * This file has a tables with all the server, session and window
@@ -815,6 +816,22 @@ const struct options_table_entry options_table[] = {
 	  .scope = OPTIONS_TABLE_SESSION,
 	  .default_str = "#S:#I:#W - \"#T\" #{session_alerts}",
 	  .text = "Format of the terminal title to set."
+	},
+
+	{ .name = "sidebar",
+	  .type = OPTIONS_TABLE_FLAG,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .default_num = 0,
+	  .text = "Whether the native left sidebar is shown by default."
+	},
+
+	{ .name = "sidebar-width",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .scope = OPTIONS_TABLE_SESSION,
+	  .minimum = SIDEBAR_MINIMUM_WIDTH,
+	  .maximum = SIDEBAR_MAXIMUM_WIDTH,
+	  .default_num = SIDEBAR_DEFAULT_WIDTH,
+	  .text = "Width of the native left sidebar."
 	},
 
 	{ .name = "silence-action",

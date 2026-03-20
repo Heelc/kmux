@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 void
 resize_window(struct window *w, u_int sx, u_int sy, int xpixel, int ypixel)
@@ -186,6 +187,7 @@ clients_calculate_size(int type, int current, struct client *c,
 			cx = loop->tty.sx;
 			cy = loop->tty.sy - status_line_size(loop);
 		}
+		cx = sidebar_client_size_x(loop, cx);
 
 		/*
 		 * If it is larger or smaller than the best so far, update the
@@ -289,7 +291,7 @@ default_window_size(struct client *c, struct session *s, struct window *w,
 	 * client and no window, use the default size as for manual type.
 	 */
 	if (type == WINDOW_SIZE_LATEST && c != NULL && !ignore_client_size(c)) {
-		*sx = c->tty.sx;
+		*sx = sidebar_client_size_x(c, c->tty.sx);
 		*sy = c->tty.sy - status_line_size(c);
 		*xpixel = c->tty.xpixel;
 		*ypixel = c->tty.ypixel;
