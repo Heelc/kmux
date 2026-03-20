@@ -6,6 +6,7 @@
 *.swp
 *~
 .deps/
+.worktrees/
 .dirstamp
 Makefile
 Makefile.in
