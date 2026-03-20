@@ -13,6 +13,8 @@
 - [x] 输出 PRD 文档
 - [x] 复查文档结构与要点完整性
 - [x] 本地提交文档变更
+- [x] 初始化 `bd` 并创建 native sidebar 主线 issue
+- [x] 更新 `AGENTS.md`，明确下个 agent 的 `bd` 工作流入口
 
 ## 关键决策
 

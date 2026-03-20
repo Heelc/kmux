@@ -6,6 +6,9 @@
 - 当前分支：`kai.he-x/sidebar-prd`
 - remote 已配置：
   - `origin git@github.com:Heelc/kmux.git`
+- 已初始化 `bd`：
+  - 数据库：`.beads/beads.db`
+  - 当前 issue 前缀：`kmux-`
 
 ## 背景来源
 
@@ -62,3 +65,24 @@
 - 方案 C：继续外层 Textual/TUI
   - 已证明不符合性能与交互目标
   - 不建议继续投入
+
+## beads 任务主线
+
+- feature：
+  - `kmux-1n6` `Native sidebar MVP`
+- ready tasks：
+  - `kmux-0c3` `Add client sidebar state and config surface`
+  - `kmux-e5d` `Render native sidebar region in client redraw`
+  - `kmux-cr0` `Route sidebar keyboard and mouse input in server client`
+  - `kmux-jl1` `Reuse window tree and mode tree for sidebar data model`
+
+## AGENTS 约定
+
+- 已在仓库根新增并更新 `AGENTS.md`
+- 约定新的 agent 进入仓库后：
+  - 先跑 `bd prime`
+  - 再跑 `bd ready`
+  - 开始编码前先 `bd show` + `bd update <id> --status=in_progress`
+- 当前 native sidebar 主线先看：
+  - `docs/native-sidebar-research.md`
+  - `docs/native-sidebar-prd.md`
