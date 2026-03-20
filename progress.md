@@ -22,3 +22,45 @@
   - 明确使用 `bd prime` / `bd ready`
   - 明确下一次开发 thread 的主线 issue 与必读文档
 - 当前工作不涉及代码实现，目标是为下一次开发 thread 提供完整上下文。
+- 重新运行 `bd prime` / `bd ready`，确认当前 ready work 仍为 4 个 native sidebar 子任务。
+- 复核 `docs/native-sidebar-research.md` 与 `docs/native-sidebar-prd.md`，确认产品目标、技术方向和 beads 拆分一致。
+- 将当前理解补充回 planning 文件，明确 MVP 的实现顺序：
+  - 先状态
+  - 再绘制
+  - 再输入
+  - 最后接入 `mode-tree/window-tree` 复用
+- 为进入实现设计阶段，补读了 `tmux.h`、`screen-redraw.c`、`server-client.c`、`window-tree.c`、`mode-tree.c` 的关键入口。
+- 确认当前最大的设计问题不是“功能缺什么”，而是：
+  - sidebar 状态机放哪里
+  - redraw 区域如何切
+  - 输入焦点怎么和右侧 tmux 共存
+  - `mode-tree/window-tree` 复用到什么层次
+- 开始用 `grill-me` 逐项收敛设计决策，已确认：
+  - session 默认值 + client override 的双层开关模型
+  - 临时切换与写回默认分成两类动作
+  - 窄终端不自动隐藏 sidebar
+  - 键盘显式进入 sidebar 焦点，鼠标点击左栏也能取焦
+  - 先提供命令入口，不预设默认快捷键
+- 进一步收敛了两项 UI 设计：
+  - MVP 左栏只显示 session 一层，不上完整树
+  - 宽度默认值倾向按终端宽度的 20% 估算，但保存为稳定配置值
+- 继续通过访谈收敛了交互与架构语义：
+  - 宽度最终改为稳定列宽 `24/20/32`
+  - 条目采用单行 session 列表，保留 current 与 selected 双状态
+  - 命令面先做 `focus-sidebar` / `toggle-sidebar` / `set-sidebar-default`
+  - 收起 sidebar 不等于提交切换
+  - 鼠标滚轮命中左栏时作用于左栏
+  - 左右区域之间保留显式分隔线
+  - sidebar 绘制倾向抽独立模块，不继续膨胀 `screen-redraw.c`
+- 按 superpower 流程将设计访谈结果整理为正式 spec：
+  - `docs/superpowers/specs/2026-03-20-native-sidebar-mvp-design.md`
+- 额外核对了 tmux 现有命令命名方式和 option scope 约定，确认 spec 中采用：
+  - command 走标准 tmux command/bind-key 机制
+  - session/global session option 管持久默认值
+  - client override 只保留在 runtime state
+- 使用 `writing-plans` 技能输出实现计划：
+  - `docs/superpowers/plans/2026-03-20-native-sidebar-mvp.md`
+- 计划中补充核对了：
+  - 新命令需要在 `cmd.c` 中注册
+  - 新源文件需要在 `Makefile.am` 中接线
+  - 新回归测试可按 `regress/*.sh` 约定直接通过 `make -C regress <script>.sh` 执行

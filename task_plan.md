@@ -15,6 +15,11 @@
 - [x] 本地提交文档变更
 - [x] 初始化 `bd` 并创建 native sidebar 主线 issue
 - [x] 更新 `AGENTS.md`，明确下个 agent 的 `bd` 工作流入口
+- [x] 复核 `docs/native-sidebar-research.md`、`docs/native-sidebar-prd.md` 与 beads 任务拆分
+- [x] 整理当前 MVP 的目标、范围、实现顺序与依赖关系
+- [x] 通过 `grill-me` 完成 native sidebar MVP 的实现设计访谈
+- [x] 输出正式设计文档到 `docs/superpowers/specs/`
+- [x] 输出正式实现计划到 `docs/superpowers/plans/`
 
 ## 关键决策
 
@@ -26,6 +31,8 @@
 
 - `docs/native-sidebar-research.md`
 - `docs/native-sidebar-prd.md`
+- `docs/superpowers/specs/2026-03-20-native-sidebar-mvp-design.md`
+- `docs/superpowers/plans/2026-03-20-native-sidebar-mvp.md`
 - `findings.md`
 - `progress.md`
 
@@ -34,3 +41,14 @@
 - `choose-tree` 并不是现成 sidebar 组件，不能低估改造成本。
 - 要做到左栏常驻，必须改 `client` 重绘和输入分发，而不是只加一个 command。
 - fork tmux 会带来长期维护成本，需要在 PRD 中明确“最小可行改动面”。
+
+## 当前执行顺序
+
+1. `kmux-0c3`
+   - 建立 `struct client` 上的 sidebar 状态、开关和选择项。
+2. `kmux-e5d`
+   - 在 `screen-redraw.c` 中切出左侧固定区域，并保证右侧 pane 视图维持原样。
+3. `kmux-cr0`
+   - 在 `server-client.c` 中接管 sidebar 的键盘和鼠标命中，再把右侧输入保持为 tmux 原生路径。
+4. `kmux-jl1`
+   - 把 `mode-tree/window-tree` 的数据和交互语义接进 sidebar，而不是自造一套树实现。
