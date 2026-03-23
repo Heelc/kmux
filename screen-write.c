@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 static struct screen_write_citem *screen_write_collect_trim(
 		    struct screen_write_ctx *, u_int, u_int, u_int, int *);
@@ -160,6 +161,7 @@ screen_write_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
 	ttyctx->bigger = tty_window_offset(&c->tty, &ttyctx->wox, &ttyctx->woy,
 	    &ttyctx->wsx, &ttyctx->wsy);
 
+	ttyctx->xoffset = sidebar_client_offset(c, c->tty.sx);
 	ttyctx->xoff = ttyctx->rxoff = wp->xoff;
 	ttyctx->yoff = ttyctx->ryoff = wp->yoff;
 

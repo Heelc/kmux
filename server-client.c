@@ -28,9 +28,11 @@
 #include <unistd.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 enum mouse_where {
 	NOWHERE,
+	SIDEBAR,
 	PANE,
 	STATUS,
 	STATUS_LEFT,
@@ -304,6 +306,7 @@ server_client_create(int fd)
 
 	c = xcalloc(1, sizeof *c);
 	c->references = 1;
+	client_sidebar_state_init(&c->sidebar);
 	c->peer = proc_add_peer(server_proc, fd, server_client_dispatch, c);
 
 	if (gettimeofday(&c->creation_time, NULL) != 0)
@@ -424,6 +427,17 @@ server_client_set_session(struct client *c, struct session *s)
 	if (old != NULL && old->curw != NULL)
 		window_update_focus(old->curw->window);
 	if (s != NULL) {
+		if (old != s && (c->flags & CLIENT_TERMINAL)) {
+			/*
+			 * Session switches replace the entire visible pane set
+			 * even when the sidebar width and window offset stay
+			 * the same. Drop cached tty cursor/region/margin state
+			 * so the next redraw and pane output start from a clean
+			 * terminal state.
+			 */
+			tty_invalidate(&c->tty);
+			c->flags |= CLIENT_CLEARONREDRAW;
+		}
 		s->curw->window->latest = c;
 		recalculate_sizes();
 		window_update_focus(s->curw->window);
@@ -697,6 +711,7 @@ server_client_check_mouse(struct client *c, struct key_event *event)
 	struct winlink		*fwl;
 	struct window_pane	*wp, *fwp;
 	u_int			 x, y, b, sx, sy, px, py, sl_mpos = 0;
+	u_int			 sidebar_width, sidebar_offset;
 	int			 ignore = 0;
 	key_code		 key;
 	struct timeval		 tv;
@@ -860,6 +875,18 @@ have_event:
 			else
 				py = y;
 
+			sidebar_width = sidebar_client_width(c, c->tty.sx);
+			sidebar_offset = sidebar_client_offset(c, c->tty.sx);
+			if (sidebar_width != 0 && px < sidebar_width) {
+				where = SIDEBAR;
+				log_debug("mouse on sidebar at %u,%u", x, py);
+				goto mouse_ready;
+			}
+			if (sidebar_offset != 0 && px < sidebar_offset)
+				return (KEYC_UNKNOWN);
+			if (sidebar_offset != 0)
+				px -= sidebar_offset;
+
 			tty_window_offset(&c->tty, &m->ox, &m->oy, &sx, &sy);
 			log_debug("mouse window @%u at %u,%u (%ux%u)",
 				  w->id, m->ox, m->oy, sx, sy);
@@ -891,6 +918,7 @@ have_event:
 		}
 	}
 
+mouse_ready:
 	/* Reset click type or add a click timer if needed. */
 	if (type == DOWN ||
 	    type == SECOND ||
@@ -1088,6 +1116,42 @@ have_event:
 		c->tty.mouse_drag_flag = 0;
 		c->tty.mouse_slider_mpos = -1;
 		goto out;
+	}
+
+	if (where == SIDEBAR) {
+		switch (type) {
+		case DOWN:
+		case SECOND:
+			if (MOUSE_BUTTONS(b) == MOUSE_BUTTON_1) {
+				evtimer_del(&c->click_timer);
+				c->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);
+				sidebar_focus_client(c);
+				(void)sidebar_select_line(c, py);
+				sidebar_commit_client_selection(c);
+			}
+			return (KEYC_UNKNOWN);
+		case DOUBLE:
+			if (MOUSE_BUTTONS(b) == MOUSE_BUTTON_1) {
+				evtimer_del(&c->click_timer);
+				c->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);
+				sidebar_focus_client(c);
+				(void)sidebar_select_line(c, py);
+				sidebar_commit_client_selection(c);
+			}
+			return (KEYC_UNKNOWN);
+		case WHEEL:
+			evtimer_del(&c->click_timer);
+			c->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);
+			sidebar_focus_client(c);
+			if (MOUSE_BUTTONS(b) == MOUSE_WHEEL_UP)
+				sidebar_move_client_selection(c, -1);
+			else
+				sidebar_move_client_selection(c, 1);
+			sidebar_commit_client_selection(c);
+			return (KEYC_UNKNOWN);
+		default:
+			return (KEYC_UNKNOWN);
+		}
 	}
 
 	/* Convert to a key binding. */
@@ -2455,6 +2519,9 @@ server_client_key_callback(struct cmdq_item *item, void *data)
 	    server_client_is_assume_paste(c))
 		goto paste_key;
 
+	if (!KEYC_IS_MOUSE(key) && sidebar_handle_key(c, key))
+		goto out;
+
 	/*
 	 * Work out the current key table. If the pane is in a mode, use
 	 * the mode table instead of the default key table.
@@ -2968,6 +3035,7 @@ server_client_reset_state(struct client *c)
 	struct options		*oo = c->session->options;
 	int			 mode = 0, cursor, flags;
 	u_int			 cx = 0, cy = 0, ox, oy, sx, sy, n;
+	u_int			 xoffset = sidebar_client_offset(c, tty->sx);
 
 	if (c->flags & (CLIENT_CONTROL|CLIENT_SUSPENDED))
 		return;
@@ -3015,7 +3083,7 @@ server_client_reset_state(struct client *c)
 		    wp->yoff + s->cy >= oy && wp->yoff + s->cy <= oy + sy) {
 			cursor = 1;
 
-			cx = wp->xoff + s->cx - ox;
+			cx = xoffset + wp->xoff + s->cx - ox;
 			cy = wp->yoff + s->cy - oy;
 
 			if (status_at_line(c) == 0)

@@ -41,6 +41,7 @@ extern char   **environ;
 struct args;
 struct args_command_state;
 struct client;
+struct client_sidebar_state;
 struct cmd;
 struct cmd_find_state;
 struct cmdq_item;
@@ -1052,6 +1053,7 @@ struct screen_redraw_ctx {
 
 	u_int		 statuslines;
 	int		 statustop;
+	u_int		 xoffset;
 
 	int		 pane_status;
 	enum pane_lines	 pane_lines;
@@ -1202,7 +1204,7 @@ struct window_pane {
 #define PANE_DROP 0x2
 #define PANE_FOCUSED 0x4
 #define PANE_VISITED 0x8
-/* 0x10 unused */
+#define PANE_RESIZE_NOREFLOW 0x10
 /* 0x20 unused */
 #define PANE_INPUTOFF 0x40
 #define PANE_CHANGED 0x80
@@ -1699,6 +1701,7 @@ struct tty_ctx {
 	u_int			 yoff;
 	u_int			 rxoff;
 	u_int			 ryoff;
+	u_int			 xoffset;
 	u_int			 sx;
 	u_int			 sy;
 
@@ -1946,6 +1949,19 @@ typedef void (*overlay_draw_cb)(struct client *, void *,
 typedef int (*overlay_key_cb)(struct client *, void *, struct key_event *);
 typedef void (*overlay_free_cb)(struct client *, void *);
 typedef void (*overlay_resize_cb)(struct client *, void *);
+
+struct client_sidebar_state {
+	int			 visible;
+	int			 focus;
+	u_int			 width;
+	int			 has_override;
+	int			 override_visible;
+	u_int			 selected_session_id;
+};
+
+extern const struct client_sidebar_state client_sidebar_state_default;
+void	 client_sidebar_state_init(struct client_sidebar_state *);
+
 struct client {
 	const char		*name;
 	struct tmuxpeer		*peer;
@@ -1996,6 +2012,7 @@ struct client {
 
 	struct status_line	 status;
 	enum client_theme	 theme;
+	struct client_sidebar_state	 sidebar;
 
 	struct input_requests	 input_requests;
 
@@ -2034,17 +2051,19 @@ struct client {
 #define CLIENT_CONTROL_PAUSEAFTER 0x100000000ULL
 #define CLIENT_CONTROL_WAITEXIT 0x200000000ULL
 #define CLIENT_WINDOWSIZECHANGED 0x400000000ULL
-/* 0x800000000ULL unused */
+#define CLIENT_REDRAWSIDEBAR 0x800000000ULL
 #define CLIENT_BRACKETPASTING 0x1000000000ULL
 #define CLIENT_ASSUMEPASTING 0x2000000000ULL
 #define CLIENT_REDRAWSCROLLBARS 0x4000000000ULL
 #define CLIENT_NO_DETACH_ON_DESTROY 0x8000000000ULL
+#define CLIENT_CLEARONREDRAW 0x10000000000ULL
 #define CLIENT_ALLREDRAWFLAGS		\
 	(CLIENT_REDRAWWINDOW|		\
 	 CLIENT_REDRAWSTATUS|		\
 	 CLIENT_REDRAWSTATUSALWAYS|	\
 	 CLIENT_REDRAWBORDERS|		\
 	 CLIENT_REDRAWOVERLAY|		\
+	 CLIENT_REDRAWSIDEBAR|		\
 	 CLIENT_REDRAWPANES|		\
 	 CLIENT_REDRAWSCROLLBARS)
 #define CLIENT_UNATTACHEDFLAGS	\
@@ -3004,6 +3023,7 @@ void	 server_client_print(struct client *, int, struct evbuffer *);
 
 /* server-fn.c */
 void	 server_redraw_client(struct client *);
+void	 server_redraw_sidebar(struct client *);
 void	 server_status_client(struct client *);
 void	 server_redraw_session(struct session *);
 void	 server_redraw_session_group(struct session *);

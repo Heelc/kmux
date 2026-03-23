@@ -130,6 +130,7 @@ dist_tmux_SOURCES = \
 	cmd-rotate-window.c \
 	cmd-run-shell.c \
 	cmd-save-buffer.c \
+	cmd-sidebar.c \
 	cmd-select-layout.c \
 	cmd-select-pane.c \
 	cmd-select-window.c \
@@ -189,6 +190,8 @@ dist_tmux_SOURCES = \
 	server-client.c \
 	server-fn.c \
 	server.c \
+	sidebar.c \
+	sidebar.h \
 	session.c \
 	sort.c \
 	spawn.c \

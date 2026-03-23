@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 static struct tmuxproc	*client_proc;
 static struct tmuxpeer	*client_peer;
@@ -68,6 +69,21 @@ static void		 client_dispatch(struct imsg *, void *);
 static void		 client_dispatch_attached(struct imsg *);
 static void		 client_dispatch_wait(struct imsg *);
 static const char	*client_exit_message(void);
+
+const struct client_sidebar_state client_sidebar_state_default = {
+	.visible = 0,
+	.focus = 0,
+	.width = SIDEBAR_DEFAULT_WIDTH,
+	.has_override = 0,
+	.override_visible = 0,
+	.selected_session_id = SIDEBAR_SESSION_NONE,
+};
+
+void
+client_sidebar_state_init(struct client_sidebar_state *state)
+{
+	*state = client_sidebar_state_default;
+}
 
 /*
  * Get server create lock. If already held then server start is happening in
