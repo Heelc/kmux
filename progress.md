@@ -64,3 +64,380 @@
   - 新命令需要在 `cmd.c` 中注册
   - 新源文件需要在 `Makefile.am` 中接线
   - 新回归测试可按 `regress/*.sh` 约定直接通过 `make -C regress <script>.sh` 执行
+- 按 beads 流程认领 `kmux-0c3` 并切到 `in_progress`。
+- 按 `using-git-worktrees` 技能创建隔离工作区：
+  - `/Users/KaiHe/workspace/ai_prj/kmux/.worktrees/sidebar-mvp-impl`
+  - 分支：`kai.he-x/sidebar-mvp-impl`
+- 为创建项目内 worktree，先补了 `.gitignore` 中的 `.worktrees/` 忽略规则，并单独提交。
+- 为让新 worktree 拿到最新设计和计划，补做了一次文档提交。
+- worktree 基线构建当前被环境阻塞：
+  - `sh autogen.sh` 失败，错误为 `aclocal: command not found`
+  - 本机有 `autoconf` / `autoreconf`，但没有 `aclocal` / `automake`
+- 通过安装 `automake` 解除了 autotools 阻塞，worktree 已可完整执行：
+  - `sh autogen.sh && ./configure --disable-utf8proc && make`
+- 按 TDD 先把 `regress/sidebar-state.sh` 改成 Chunk 1 的目标行为，再确认实现前红在：
+  - `invalid option: sidebar`
+- 完成了 Chunk 1 的实现：
+  - `tmux.h` / `client.c` / `server-client.c` 落下 client sidebar state
+  - `options-table.c` 增加 `sidebar` 与 `sidebar-width`
+  - 新增 `sidebar.c` / `sidebar.h`
+  - 新增 `cmd-sidebar.c`
+  - `cmd.c` 注册 sidebar 命令
+- 修正了 `regress/sidebar-state.sh` 的清理逻辑，确保串行重复执行不会遗留 `-Ltest` server。
+- 已完成当前验证：
+  - `sh autogen.sh && ./configure --disable-utf8proc && make`
+  - `sh regress/sidebar-state.sh`
+  - `make -C regress TESTS=sidebar-state.sh sidebar-state.sh`
+- 继续按 TDD 推进 redraw：
+  - 先新增 `regress/sidebar-redraw.sh`
+  - 确认未实现前红在 `sidebar default width failed: 80x24`
+- 为让 `window_width` 真正收缩，实施时没有只改 `screen-redraw.c`，而是同时接入：
+  - `resize.c` 的 client 宽度计算
+  - `tty.c` 的窗口绘制 offset
+  - `screen-redraw.c` 的 sidebar 绘制入口
+  - `sidebar.c` 的有效宽度、offset 和最小 session 列表绘制
+- 已完成 redraw/layout 验证：
+  - `sh autogen.sh && ./configure --disable-utf8proc && make`
+  - `sh regress/sidebar-redraw.sh`
+  - `make -C regress TESTS=sidebar-redraw.sh sidebar-redraw.sh`
+  - 复跑 `sh regress/sidebar-state.sh`
+  - 复跑 `make -C regress TESTS=sidebar-state.sh sidebar-state.sh`
+- 下一步进入输入层：
+  - 先写 `regress/sidebar-input.sh`
+  - 再在 `server-client.c` 中接 sidebar 键盘/鼠标白名单路由
+- 按 TDD 为 Chunk 3 先补了 `regress/sidebar-input.sh`：
+  - 使用 control mode client + `send-keys -K -c <client>` 驱动 `server_client_handle_key()`
+  - 避开了 `expect`/`script` attach client 在无 tty 回归环境下不稳定的问题
+- 在输入层调试中发现一个真实崩溃点：
+  - sidebar 初版把 `session_next_session(..., NULL)` 当作默认排序调用
+  - `sort.c` 会直接解引用 `sort_crit`
+  - 修复为显式传入 `SORT_ORDER` 的默认 `sort_criteria`
+- 已完成 Chunk 3 的键盘半段：
+  - `server-client.c` 在 key table 查找前接入 `sidebar_handle_key()`
+  - `sidebar.c` 新增 session selection 导航和 Enter 提交切换
+  - 左栏条目前缀现在可同时表达 `current` 与 `selected`
+- 已完成当前验证：
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `make -C regress TESTS=sidebar-input.sh sidebar-input.sh`
+  - `make -C regress TESTS=sidebar-state.sh sidebar-state.sh`
+  - `make -C regress TESTS=sidebar-redraw.sh sidebar-redraw.sh`
+- 完成了 `kmux-cr0` 的鼠标半段：
+  - `server_client_check_mouse()` 现在会在 sidebar 命中时优先消费单击、双击和滚轮
+  - 单击会取焦并更新高亮
+  - 双击会切换当前 client 的 session
+  - 滚轮会上下移动 sidebar selection
+- 同步修正了 sidebar 的数据一致性：
+  - `sidebar_select_line()` / `sidebar_move_client_selection()` / `sidebar_commit_client_selection()` 对外导出
+  - `sidebar_draw()` 改为与选择逻辑共用 `sort_get_sessions()`，避免显示顺序和行选择错位
+- 已完成本轮验证：
+  - `make -j2`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `make -C regress TESTS=sidebar-input.sh sidebar-input.sh`
+  - `make -C regress TESTS=sidebar-state.sh sidebar-state.sh`
+  - `make -C regress TESTS=sidebar-redraw.sh sidebar-redraw.sh`
+  - `make -C regress TESTS=session-group-resize.sh session-group-resize.sh`
+  - `make -C regress TESTS=tty-keys.sh tty-keys.sh`
+- broader safety net 中有一个非 sidebar 根因的失败：
+  - `make -C regress TESTS=input-keys.sh input-keys.sh`
+  - 失败点在 `C-c` case，测试里的 `cat -tv` 窗口提前消失，导致后续 `capturep`/`kill-window` 找不到 `0:1.0`
+  - 由于该脚本并未启用 sidebar 或进入 sidebar focus，这个失败目前记录为环境/原脚本行为问题，不作为 sidebar 回归阻塞
+- 当前进入 `kmux-jl1`：
+  - 已确认 sidebar 直接复用了 session 排序和遍历 helper
+  - 暂不需要把 `window-tree.c` / `mode-tree.c` 做成新的 client 级通用组件
+- 按 code review 跟进修复了两个阻塞项：
+  - `server_client_check_mouse()` 在 pane 命中前先扣 sidebar offset，并把 divider 列从 pane 路径中剔除
+  - `sidebar_client_width()` 在极窄终端下临时返回 `0`，优先保住右侧 `20` 列 pane 区
+- 先用 `-vv` 复现并读 server log，确认生产代码已经把 `MouseDown1Pane` 正确命中到左 pane，问题随后收敛到 `regress/sidebar-mouse.sh` 自身。
+- 修正了 `regress/sidebar-mouse.sh` 的两个测试问题：
+  - 用 `Ctrl-b d` detach attach client，避免 `Ctrl-C` 杀死当前激活 pane
+  - 通过 `TMUX_BIN` 传入绝对二进制路径，保证 `make -C regress` 场景下的 expect attach 仍然指向正确的 `tmux`
+- review follow-up 回归现已全绿：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `make -C regress TESTS=sidebar-state.sh sidebar-state.sh`
+  - `make -C regress TESTS=sidebar-redraw.sh sidebar-redraw.sh`
+  - `make -C regress TESTS=sidebar-input.sh sidebar-input.sh`
+  - `make -C regress TESTS=sidebar-mouse.sh sidebar-mouse.sh`
+- 用户手工测试反馈了一个 live toggle 画面错乱问题。
+- 重新按系统化调试复盘后，先排除了：
+  - 动态 `set -g sidebar on` 不会意外切 session
+  - attach client 的 offset 更新路径本身是会触发的
+- 当前怀疑点收敛到 tty 缓存：
+  - sidebar 改变的是绘制 origin，不只是 pane 内容
+  - `tty_update_client_offset()` 旧实现只改缓存值并标 redraw，没有重置 tty 的 cursor/region/cell 状态
+- 已实施最小修复：
+  - 在 `tty_update_client_offset()` 中调用 `tty_invalidate(&c->tty)`
+  - 同时把后续重绘提升为 `CLIENT_ALLREDRAWFLAGS`
+- 修复后已复跑现有 sidebar 回归：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `make -C regress TESTS=sidebar-state.sh sidebar-state.sh`
+  - `make -C regress TESTS=sidebar-redraw.sh sidebar-redraw.sh`
+  - `make -C regress TESTS=sidebar-input.sh sidebar-input.sh`
+  - `make -C regress TESTS=sidebar-mouse.sh sidebar-mouse.sh`
+- 继续基于用户截图和真实 attach 路径深挖后，确认 `tty_invalidate()` 不是根因层修复：
+  - 真正问题是把 sidebar 的屏幕偏移错误混进了 `tty_window_offset1()` 的 window 视口语义
+  - 这会让 pane 内应用自己发起的输出路径（例如 `Ctrl-l`）也使用错误坐标
+- 已把修复改成显式 screen offset 方案：
+  - `tty_window_offset1()` 恢复为纯 window 视口计算
+  - `screen-write.c` / `tty.c` / `screen-redraw.c` 改为显式叠加 sidebar 屏幕偏移
+  - `screen_redraw_draw_pane()` 的 overlay/source 计算同步修正
+- 跟进时发现 `server_client_check_mouse()` 仍保留了旧语义下的二次扣减：
+  - `px` 在进入 pane 命中前已经扣过 sidebar offset
+  - 再减一次会让 `sidebar-mouse.sh` 失败
+  - 现已修复并重新验证通过
+- 期间一次 `sidebar-input.sh` 的 `no client attached` 是我误把多个 `regress` 脚本并行执行造成的假失败；
+  已改回串行运行并恢复全绿。
+- 当前最新验证：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+- 用户随后反馈了 cursor 漂移和 `ls` 后整屏异常两个新问题。
+- 已用真实 PTY attach 到 `./tmux -Lkmux-live -f/dev/null attach -t alpha` 复现交互路径，而不是只依赖 control mode 或 `capture-pane`。
+- 根因定位到 `tty_ctx`：
+  - 之前把 `xoff/rxoff` 也改成了屏幕绝对坐标
+  - 这污染了 cursor、clear、margin、scroll region 和普通 pane 输出路径
+- 已改回正确语义：
+  - `xoff/rxoff` 恢复为 pane/window 坐标
+  - `xoffset` 单独用于终端物理坐标
+  - 重新编译并复跑 `sh regress/sidebar-state.sh && sh regress/sidebar-redraw.sh && sh regress/sidebar-input.sh && sh regress/sidebar-mouse.sh`，通过
+- 用户随后反馈“鼠标切 session 后界面还有重绘问题”。
+- 已补做分诊实验，确认这是 pane buffer 级现象：
+  - 用 `kmux-repro3/kmux-repro4` 复现 detached session 在 80 列生成 prompt/history，再在 55 列 sidebar pane 下 attach/switch
+  - 切换后立刻 `capture-pane`，内容已经显示为缩宽后的 prompt/history 重排
+  - 再发送一次 `Enter`，只会新增一条新的 prompt，旧历史仍保留
+- 继续按 TDD 深挖后，确认可修复点不是 redraw，而是 sidebar 提交时触发的 pane resize reflow：
+  - 先新增 `regress/sidebar-switch-reflow.sh`
+  - 初始红测证明：走真实 `focus-sidebar + j + Enter` 路径切到 detached `beta` 后，旧 80 列文本会泄漏到第二行
+- 已实施最小修复：
+  - `sidebar.c` 在切到 `attached == 0` 且将 shrink 的目标 session 前，给目标 current window 的 panes 打一次性 `PANE_RESIZE_NOREFLOW`
+  - `window.c` 中 `window_pane_resize()` 消耗该 flag，本次 resize 调用 `screen_resize(..., 0)`
+  - `tmux.h` 新增 transient pane flag 定义
+- 本轮验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+  - `make -C regress TESTS=sidebar-switch-reflow.sh sidebar-switch-reflow.sh`
+- 用户继续反馈真实 attach client 上，切换 workspace 后右侧仍会残留前一个 workspace 的部分终端画面。
+- 针对这个症状，已补一条更保守的 session switch 清理：
+  - `server_client_set_session()` 在 `old != s` 且 `CLIENT_TERMINAL` 时先 `tty_invalidate(&c->tty)`
+  - 不再要求 sidebar offset 或 window offset 发生变化才清理 tty 缓存
+  - 目标是把旧 session 残留的 cursor/region/margin 状态在切换时一次性丢掉
+- 复跑验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 基于用户最新截图继续深挖后，确认还存在一处 sidebar `xoffset` 引入后的裁剪坐标系错误：
+  - `tty_clamp_line()` / `tty_clamp_area()` 的“右侧部分不可见”分支把绝对终端坐标 `x` 和相对宽度 `wsx` 混算
+  - 导致 clear 与部分 redraw 只覆盖到 pane 可见区的一部分
+  - 现已把右裁剪宽度修成 `(ctx->xoffset + ctx->wsx) - x`
+- 修复后再次验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户随后给出更精确的真实验收路径：
+  - 在 `alpha` 执行 `ls`
+  - 单击左侧 `beta`
+  - 再双击进入 `beta`
+  - 结果单击阶段右侧就已出现重复/残留渲染
+- 基于这条复现链继续分析后，确认问题点落在 sidebar-only redraw：
+  - 单击/滚轮/`j/k` 现在只打 `CLIENT_REDRAWSIDEBAR`
+  - 但 `tty_reset()` 不会清理 pane 绘制留下的 scroll region / left-right margins
+  - 因而 sidebar 只重画左栏时，终端仍可能约束在右侧 pane 的 margin 内落笔，造成右侧污染
+- 已实施最小修复：
+  - `screen_redraw_screen()` 在“仅 sidebar redraw”的场景下先 `tty_invalidate(&c->tty)`
+  - 然后再执行 `sidebar_draw(&ctx)`，把终端恢复到全屏基线后再只画左栏
+- 本轮重新验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户继续反馈：
+  - 反复切换后仍有轻微脏画面
+  - 但在右侧 pane 任意执行一个命令后，画面会恢复正常
+- 基于这个现象继续收敛后，当前判断是 session switch 的清屏顺序仍有问题：
+  - 之前 `CLIENT_CLEARONREDRAW` 走的是先 `TTYC_CLEAR`，再 `tty_invalidate()`
+  - 如果终端还保留上一块 pane 的 margin/scroll-region，`CLEAR` 可能只清掉受限区域，后续 pane 内容本身其实已经是对的，所以新命令一输出就“看起来恢复”
+- 已调整为更合理的顺序：
+  - 先 `tty_invalidate(&c->tty)`，把终端恢复到全屏基线
+  - 再 `tty_putcode(&c->tty, TTYC_CLEAR)` 执行整屏清除
+- 本轮再次验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户继续补充了一个新的精确症状：
+  - 在 `A` workspace 执行 `ls`
+  - 切到 `B` 没问题
+  - 再切回 `A` 时，旧内容整体向右偏移，但光标位置正确
+- 基于这个现象继续排查后，确认问题出在 full redraw 的目标坐标，而不是 cursor 路径：
+  - `screen_redraw_draw_pane()` 中，`tty_check_overlay_range()` 返回的 `rr->px` 已经是包含 sidebar offset 的终端绝对列
+  - 但调用 `tty_draw_line()` 时又额外加了一次 `ctx->xoffset`
+  - 这只会影响“从 pane buffer 重画已有内容”的路径，因此和用户描述完全一致：
+    - 初次 `ls` 正常
+    - 切走再切回才整体右移
+    - 光标仍在正确位置
+- 已实施最小修复：
+  - `tty_draw_line()` 的目标列从 `ctx->xoffset + rr->px` 改成 `rr->px`
+  - 避免 sidebar offset 被叠加两次
+- 本轮再次验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户随后确认主要视觉问题已经基本解决，并提出交互变更：
+  - 左栏单击立即切换
+  - sidebar focus 下 `j/k` 立即切换
+- 按 `brainstorming` 的最小设计收敛后，采用：
+  - 单击即切换
+  - 双击等同单击
+  - `j/k/g/G` 移动即切换
+  - `Enter` 保留为原确认路径
+- 按 TDD 先补红测：
+  - 更新 `regress/sidebar-input.sh`，要求 `j` 立刻切到 `sidebar-b`、`k` 切回 `sidebar-a`
+  - 新增 `regress/sidebar-click-switch.sh`，要求单击 sidebar `beta` 立刻切 session
+  - 先确认旧实现下两条都失败
+- 已实施最小代码变更：
+  - `sidebar.c` 抽出 `sidebar_apply_client_selection(..., unfocus)` 和公开 helper `sidebar_activate_client_selection()`
+  - `j/k/g/G` 在更新 selection 后立即走 `sidebar_activate_client_selection()`
+  - `server-client.c` 中 sidebar 单击、双击和滚轮现在都走“选择即切换”路径
+- 新行为验证通过：
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-click-switch.sh`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户随后在手工测试中报告：
+  - 左侧单击切换 workspace 后，命令文本可以输入
+  - 但第一下 `Enter` 没反应，第二下才生效
+- 按系统化调试继续复现后，确认这是一个真实状态机问题，不是体感误差：
+  - 单击切到 `beta` 后，第一下 `Enter` 进不到 `beta` 前台进程
+  - 第二下才会进入 pane
+  - 补充实验也证明：单击切换后发一个 `j`，client 会又被 sidebar 当导航键吃掉
+- 根因收敛到 click timer：
+  - sidebar 分支已经在单击时完成切换并调用 `sidebar_commit_client_selection()`
+  - 但 tmux 原生 click timer 仍然保留 `CLIENT_DOUBLECLICK/CLIENT_TRIPLECLICK`
+  - 定时器过期后再次合成 click 语义，把 client 拉回 sidebar 路径
+- 已实施最小修复：
+  - `server-client.c` 在 sidebar 命中并消费鼠标单击/双击/滚轮时
+  - 立即 `evtimer_del(&c->click_timer)`
+  - 并清除 `CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK`
+- 本轮重新验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-click-switch.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户随后继续收敛了 sidebar 默认快捷键体验：
+  - `Option + s` 进入 sidebar 焦点；若已在 sidebar 焦点则退出
+  - `Option + Shift + s` 保留原 `choose-tree -s`
+  - `j/k/g/G` 在 sidebar 焦点内继续“移动即切换”
+- 为这组新行为补写了文档：
+  - `docs/superpowers/specs/2026-03-23-sidebar-shortcuts-design.md`
+  - `docs/superpowers/plans/2026-03-23-sidebar-shortcuts.md`
+- 按 TDD 扩展回归：
+  - `regress/sidebar-state.sh` 新增默认 `M-s/M-S` 绑定断言
+  - `regress/sidebar-input.sh` 新增 `focus-sidebar` 连续执行两次后退出 sidebar 焦点的断言
+- 红测确认：
+  - `sidebar-state.sh` 因缺少默认 `M-s/M-S` 绑定而失败
+  - `sidebar-input.sh` 因 `focus-sidebar` 只能进入不能退出而失败
+- 已实施最小代码变更：
+  - `cmd-sidebar.c` 中 `focus-sidebar` 改为 toggle 语义
+  - `key-bindings.c` 中 root 表新增默认绑定：
+    - `M-s -> focus-sidebar`
+    - `M-S -> choose-tree -s`
+- 当前已验证通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-click-switch.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+- 用户随后把范围扩展到“把本机 tmux 配置迁移进项目”，并明确：
+  - 不要原样复制个人配置
+  - 要做成项目可分发的精简版
+  - 本轮要一起带上基础主题
+- 基于现有 `example_tmux.conf` 和用户的 `~/.tmux.conf.local`，当前已完成迁移设计收敛：
+  - 采用分层结构：
+    - `example_tmux.conf`
+    - `themes/kmux-base.conf`
+    - `keybindings/kmux-keys.conf`
+  - 基础主题方向定为“冷静蓝灰”
+  - 快捷键范围只迁 sidebar/workspace 和高频 `Option` 工作流
+  - 不迁 oh-my-tmux 变量体系、插件逻辑和宿主冲突较大的 `Option + Arrow`
+- 已输出正式设计文档：
+  - `docs/superpowers/specs/2026-03-23-example-tmux-config-migration-design.md`
+- 已按 `writing-plans` 输出正式实现计划：
+  - `docs/superpowers/plans/2026-03-23-example-tmux-config-migration.md`
+- 当前实现顺序已收敛为：
+  - 先让 `example_tmux.conf` 入口和 clean-config 回归变红
+  - 再补 `themes/kmux-base.conf`
+  - 再补 `keybindings/kmux-keys.conf`
+  - 最后做串行回归和手工 smoke 测试
+- 按 TDD 先扩展了 clean-config 回归：
+  - `regress/sidebar-state.sh` 增加 `source-file example_tmux.conf` 后的非默认快捷键断言
+  - `regress/sidebar-redraw.sh` 增加基础主题样式断言
+- 红测第一次失败暴露了旧 `example_tmux.conf` 的真实问题：
+  - 并不只是“缺少 sidebar 相关配置”
+  - 而是 source 时会直接因为旧 `neww/setw` 演示逻辑报 `no such window: 0:1`
+- 已在 `sidebar-mvp-impl` worktree 实现新的分层示例配置：
+  - 重写 `example_tmux.conf`
+  - 新增 `themes/kmux-base.conf`
+  - 新增 `keybindings/kmux-keys.conf`
+- 实施中确认了一个关键实现细节：
+  - `source-file` 默认不展开格式
+  - 必须使用 `source-file -F`
+  - 目录推导依赖 `#{d:current_file}`，不能写不存在的 `#{current_file_path}`
+- fresh verification 已通过：
+  - `make -j2`
+  - `sh regress/sidebar-state.sh`
+  - `sh regress/sidebar-input.sh`
+  - `sh regress/sidebar-redraw.sh`
+  - `sh regress/sidebar-click-switch.sh`
+  - `sh regress/sidebar-mouse.sh`
+  - `sh regress/sidebar-switch-reflow.sh`
+  - `./tmux -Lkmux-example -f /Users/KaiHe/workspace/ai_prj/kmux/.worktrees/sidebar-mvp-impl/example_tmux.conf new-session -d -s alpha -x 100 -y 30`
+  - `./tmux -Lkmux-example ... show-options -gv status-style`
+  - `./tmux -Lkmux-example ... list-keys | rg 'M-s|M-S|M-r|M-D'`
+- 当前进入 focused code review 阶段：
+  - review 范围收敛到 `example_tmux.conf`、`themes/kmux-base.conf`、`keybindings/kmux-keys.conf` 及其 clean-config 回归
+  - 暂未发现新的阻塞问题
+  - 已按 review 修复 1 个提交前小问题：
+    - `themes/kmux-base.conf` 现在显式 `set -g sidebar on`
+    - `regress/sidebar-state.sh` 新增“先关再 source example config 仍会恢复 sidebar on”的红绿验证
+  - review follow-up verification 已通过：
+    - `sh regress/sidebar-state.sh`
+    - `sh regress/sidebar-redraw.sh`
+    - `./tmux -Lkmux-example-review -f example_tmux.conf new-session ...`
+    - `show-options -gv sidebar -> on`
