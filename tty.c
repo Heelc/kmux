@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include "tmux.h"
+#include "sidebar.h"
 
 static int	tty_log_fd = -1;
 
@@ -1049,7 +1050,12 @@ tty_update_client_offset(struct client *c)
 	c->tty.osx = sx;
 	c->tty.osy = sy;
 
-	c->flags |= (CLIENT_REDRAWWINDOW|CLIENT_REDRAWSTATUS);
+	/*
+	 * Moving the window origin changes the absolute coordinates used by pane
+	 * drawing, so invalidate cached tty state before the next redraw.
+	 */
+	tty_invalidate(&c->tty);
+	c->flags |= CLIENT_ALLREDRAWFLAGS;
 }
 
 /*
@@ -1132,23 +1138,23 @@ tty_clamp_line(struct tty *tty, const struct tty_ctx *ctx, u_int px, u_int py,
 	if (xoff >= ctx->wox && xoff + nx <= ctx->wox + ctx->wsx) {
 		/* All visible. */
 		*i = 0;
-		*x = ctx->xoff + px - ctx->wox;
+		*x = ctx->xoffset + ctx->xoff + px - ctx->wox;
 		*rx = nx;
 	} else if (xoff < ctx->wox && xoff + nx > ctx->wox + ctx->wsx) {
 		/* Both left and right not visible. */
 		*i = ctx->wox;
-		*x = 0;
+		*x = ctx->xoffset;
 		*rx = ctx->wsx;
 	} else if (xoff < ctx->wox) {
 		/* Left not visible. */
 		*i = ctx->wox - (ctx->xoff + px);
-		*x = 0;
+		*x = ctx->xoffset;
 		*rx = nx - *i;
 	} else {
 		/* Right not visible. */
 		*i = 0;
-		*x = (ctx->xoff + px) - ctx->wox;
-		*rx = ctx->wsx - *x;
+		*x = ctx->xoffset + (ctx->xoff + px) - ctx->wox;
+		*rx = (ctx->xoffset + ctx->wsx) - *x;
 	}
 	if (*rx > nx)
 		fatalx("%s: x too big, %u > %u", __func__, *rx, nx);
@@ -1229,23 +1235,23 @@ tty_clamp_area(struct tty *tty, const struct tty_ctx *ctx, u_int px, u_int py,
 	if (xoff >= ctx->wox && xoff + nx <= ctx->wox + ctx->wsx) {
 		/* All visible. */
 		*i = 0;
-		*x = ctx->xoff + px - ctx->wox;
+		*x = ctx->xoffset + ctx->xoff + px - ctx->wox;
 		*rx = nx;
 	} else if (xoff < ctx->wox && xoff + nx > ctx->wox + ctx->wsx) {
 		/* Both left and right not visible. */
 		*i = ctx->wox;
-		*x = 0;
+		*x = ctx->xoffset;
 		*rx = ctx->wsx;
 	} else if (xoff < ctx->wox) {
 		/* Left not visible. */
 		*i = ctx->wox - (ctx->xoff + px);
-		*x = 0;
+		*x = ctx->xoffset;
 		*rx = nx - *i;
 	} else {
 		/* Right not visible. */
 		*i = 0;
-		*x = (ctx->xoff + px) - ctx->wox;
-		*rx = ctx->wsx - *x;
+		*x = ctx->xoffset + (ctx->xoff + px) - ctx->wox;
+		*rx = (ctx->xoffset + ctx->wsx) - *x;
 	}
 	if (*rx > nx)
 		fatalx("%s: x too big, %u > %u", __func__, *rx, nx);
@@ -1369,7 +1375,8 @@ tty_draw_pane(struct tty *tty, const struct tty_ctx *ctx, u_int py)
 	log_debug("%s: %s %u %d", __func__, tty->client->name, py, ctx->bigger);
 
 	if (!ctx->bigger) {
-		tty_draw_line(tty, s, 0, py, nx, ctx->xoff, ctx->yoff + py,
+		tty_draw_line(tty, s, 0, py, nx, ctx->xoffset + ctx->xoff,
+		    ctx->yoff + py,
 		    &ctx->defaults, ctx->palette);
 		return;
 	}
@@ -1458,6 +1465,8 @@ tty_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
 	ttyctx->bigger = tty_window_offset(&c->tty, &ttyctx->wox, &ttyctx->woy,
 	    &ttyctx->wsx, &ttyctx->wsy);
 
+	ttyctx->xoffset = sidebar_client_offset(c, c->tty.sx);
+	ttyctx->xoff = ttyctx->rxoff = wp->xoff;
 	ttyctx->yoff = ttyctx->ryoff = wp->yoff;
 	if (status_at_line(c) == 0)
 		ttyctx->yoff += status_line_size(c);
@@ -1481,6 +1490,7 @@ tty_draw_images(struct client *c, struct window_pane *wp, struct screen *s)
 		ttyctx.orlower = s->rlower;
 		ttyctx.orupper = s->rupper;
 
+		ttyctx.xoffset = sidebar_client_offset(c, c->tty.sx);
 		ttyctx.xoff = ttyctx.rxoff = wp->xoff;
 		ttyctx.sx = wp->sx;
 		ttyctx.sy = wp->sy;
@@ -1786,7 +1796,7 @@ tty_cmd_linefeed(struct tty *tty, const struct tty_ctx *ctx)
 	 * this and insert extra spaces, so only use the right if margins are
 	 * enabled.
 	 */
-	if (ctx->xoff + ctx->ocx > tty->rright) {
+	if (ctx->xoffset + ctx->xoff + ctx->ocx > tty->rright) {
 		if (!tty_use_margin(tty))
 			tty_cursor(tty, 0, ctx->yoff + ctx->ocy);
 		else
@@ -1970,7 +1980,7 @@ tty_cmd_cell(struct tty *tty, const struct tty_ctx *ctx)
 	struct visible_ranges	*r;
 	u_int			 px, py, i, vis = 0;
 
-	px = ctx->xoff + ctx->ocx - ctx->wox;
+	px = ctx->xoffset + ctx->xoff + ctx->ocx - ctx->wox;
 	py = ctx->yoff + ctx->ocy - ctx->woy;
 	if (!tty_is_visible(tty, ctx, ctx->ocx, ctx->ocy, 1, 1) ||
 	    (gcp->data.width == 1 && !tty_check_overlay(tty, px, py)))
@@ -1978,7 +1988,8 @@ tty_cmd_cell(struct tty *tty, const struct tty_ctx *ctx)
 
 	if (ctx->num == 2) {
 		tty_draw_line(tty, s, 0, s->cy, screen_size_x(s),
-		    ctx->xoff - ctx->wox, py, &ctx->defaults, ctx->palette);
+		    ctx->xoffset + ctx->xoff - ctx->wox, py,
+		    &ctx->defaults, ctx->palette);
 		return;
 	}
 
@@ -1994,7 +2005,7 @@ tty_cmd_cell(struct tty *tty, const struct tty_ctx *ctx)
 		}
 	}
 
-	if (ctx->xoff + ctx->ocx - ctx->wox > tty->sx - 1 &&
+	if (ctx->xoffset + ctx->xoff + ctx->ocx - ctx->wox > tty->sx - 1 &&
 	    ctx->ocy == ctx->orlower &&
 	    tty_full_width(tty, ctx))
 		tty_region_pane(tty, ctx, ctx->orupper, ctx->orlower);
@@ -2026,7 +2037,7 @@ tty_cmd_cells(struct tty *tty, const struct tty_ctx *ctx)
 		if (!ctx->wrapped ||
 		    !tty_full_width(tty, ctx) ||
 		    (tty->term->flags & TERM_NOAM) ||
-		    ctx->xoff + ctx->ocx != 0 ||
+		    ctx->xoffset + ctx->xoff + ctx->ocx != 0 ||
 		    ctx->yoff + ctx->ocy != tty->cy + 1 ||
 		    tty->cx < tty->sx ||
 		    tty->cy == tty->rlower)
@@ -2042,14 +2053,14 @@ tty_cmd_cells(struct tty *tty, const struct tty_ctx *ctx)
 	    ctx->s->hyperlinks);
 
 	/* Get tty position from pane position for overlay check. */
-	px = ctx->xoff + ctx->ocx - ctx->wox;
+	px = ctx->xoffset + ctx->xoff + ctx->ocx - ctx->wox;
 	py = ctx->yoff + ctx->ocy - ctx->woy;
 
 	r = tty_check_overlay_range(tty, px, py, ctx->num);
 	for (i = 0; i < r->used; i++) {
 		rr = &r->ranges[i];
 		if (rr->nx != 0) {
-			cx = rr->px - ctx->xoff + ctx->wox;
+			cx = rr->px - ctx->xoffset - ctx->xoff + ctx->wox;
 			tty_cursor_pane_unless_wrap(tty, ctx, cx, ctx->ocy);
 			tty_putn(tty, cp + rr->px - px, rr->nx, rr->nx);
 		}
@@ -2293,8 +2304,8 @@ tty_margin_off(struct tty *tty)
 static void
 tty_margin_pane(struct tty *tty, const struct tty_ctx *ctx)
 {
-	tty_margin(tty, ctx->xoff - ctx->wox,
-	    ctx->xoff + ctx->sx - 1 - ctx->wox);
+	tty_margin(tty, ctx->xoffset + ctx->xoff - ctx->wox,
+	    ctx->xoffset + ctx->xoff + ctx->sx - 1 - ctx->wox);
 }
 
 /* Set margin at absolute position. */
@@ -2329,7 +2340,7 @@ tty_cursor_pane_unless_wrap(struct tty *tty, const struct tty_ctx *ctx,
 	if (!ctx->wrapped ||
 	    !tty_full_width(tty, ctx) ||
 	    (tty->term->flags & TERM_NOAM) ||
-	    ctx->xoff + cx != 0 ||
+	    ctx->xoffset + ctx->xoff + cx != 0 ||
 	    ctx->yoff + cy != tty->cy + 1 ||
 	    tty->cx < tty->sx ||
 	    tty->cy == tty->rlower)
@@ -2342,7 +2353,8 @@ tty_cursor_pane_unless_wrap(struct tty *tty, const struct tty_ctx *ctx,
 static void
 tty_cursor_pane(struct tty *tty, const struct tty_ctx *ctx, u_int cx, u_int cy)
 {
-	tty_cursor(tty, ctx->xoff + cx - ctx->wox, ctx->yoff + cy - ctx->woy);
+	tty_cursor(tty, ctx->xoffset + ctx->xoff + cx - ctx->wox,
+	    ctx->yoff + cy - ctx->woy);
 }
 
 /* Move cursor to absolute position. */

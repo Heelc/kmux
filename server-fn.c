@@ -37,6 +37,12 @@ server_redraw_client(struct client *c)
 }
 
 void
+server_redraw_sidebar(struct client *c)
+{
+	c->flags |= CLIENT_REDRAWSIDEBAR;
+}
+
+void
 server_status_client(struct client *c)
 {
 	c->flags |= CLIENT_REDRAWSTATUS;
