@@ -427,6 +427,17 @@ server_client_set_session(struct client *c, struct session *s)
 	if (old != NULL && old->curw != NULL)
 		window_update_focus(old->curw->window);
 	if (s != NULL) {
+		if (old != s && (c->flags & CLIENT_TERMINAL)) {
+			/*
+			 * Session switches replace the entire visible pane set
+			 * even when the sidebar width and window offset stay
+			 * the same. Drop cached tty cursor/region/margin state
+			 * so the next redraw and pane output start from a clean
+			 * terminal state.
+			 */
+			tty_invalidate(&c->tty);
+			c->flags |= CLIENT_CLEARONREDRAW;
+		}
 		s->curw->window->latest = c;
 		recalculate_sizes();
 		window_update_focus(s->curw->window);
@@ -881,7 +892,7 @@ have_event:
 				  w->id, m->ox, m->oy, sx, sy);
 			if (px > sx || py > sy)
 				return (KEYC_UNKNOWN);
-			px = px + m->ox - sidebar_offset;
+			px = px + m->ox;
 			py = py + m->oy;
 
 			/* Try inside the pane. */
@@ -1112,25 +1123,31 @@ mouse_ready:
 		case DOWN:
 		case SECOND:
 			if (MOUSE_BUTTONS(b) == MOUSE_BUTTON_1) {
+				evtimer_del(&c->click_timer);
+				c->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);
 				sidebar_focus_client(c);
 				(void)sidebar_select_line(c, py);
-				server_redraw_client(c);
+				sidebar_commit_client_selection(c);
 			}
 			return (KEYC_UNKNOWN);
 		case DOUBLE:
 			if (MOUSE_BUTTONS(b) == MOUSE_BUTTON_1) {
+				evtimer_del(&c->click_timer);
+				c->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);
 				sidebar_focus_client(c);
 				(void)sidebar_select_line(c, py);
 				sidebar_commit_client_selection(c);
 			}
 			return (KEYC_UNKNOWN);
 		case WHEEL:
+			evtimer_del(&c->click_timer);
+			c->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);
 			sidebar_focus_client(c);
 			if (MOUSE_BUTTONS(b) == MOUSE_WHEEL_UP)
 				sidebar_move_client_selection(c, -1);
 			else
 				sidebar_move_client_selection(c, 1);
-			server_redraw_client(c);
+			sidebar_commit_client_selection(c);
 			return (KEYC_UNKNOWN);
 		default:
 			return (KEYC_UNKNOWN);
@@ -3018,6 +3035,7 @@ server_client_reset_state(struct client *c)
 	struct options		*oo = c->session->options;
 	int			 mode = 0, cursor, flags;
 	u_int			 cx = 0, cy = 0, ox, oy, sx, sy, n;
+	u_int			 xoffset = sidebar_client_offset(c, tty->sx);
 
 	if (c->flags & (CLIENT_CONTROL|CLIENT_SUSPENDED))
 		return;
@@ -3065,7 +3083,7 @@ server_client_reset_state(struct client *c)
 		    wp->yoff + s->cy >= oy && wp->yoff + s->cy <= oy + sy) {
 			cursor = 1;
 
-			cx = wp->xoff + s->cx - ox;
+			cx = xoffset + wp->xoff + s->cx - ox;
 			cy = wp->yoff + s->cy - oy;
 
 			if (status_at_line(c) == 0)

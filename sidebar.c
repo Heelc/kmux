@@ -32,7 +32,9 @@ static struct session	**sidebar_get_sorted_sessions(u_int *);
 static void		 sidebar_select_first(struct client *);
 static void		 sidebar_select_last(struct client *);
 static void		 sidebar_move_selection(struct client *, int);
-static void		 sidebar_commit_client(struct client *);
+static void		 sidebar_apply_client_selection(struct client *, int);
+static void		 sidebar_prepare_session_switch(struct client *,
+			     struct session *);
 
 static u_int
 sidebar_current_session_id(struct client *c)
@@ -115,21 +117,49 @@ sidebar_move_selection(struct client *c, int direction)
 }
 
 static void
-sidebar_commit_client(struct client *c)
+sidebar_prepare_session_switch(struct client *c, struct session *target)
+{
+	struct window		*w;
+	struct window_pane	*wp;
+	u_int			 sx;
+
+	if (target == NULL || target->attached != 0 || target->curw == NULL)
+		return;
+
+	w = target->curw->window;
+	sx = sidebar_client_size_x(c, c->tty.sx);
+	if (sx >= w->sx)
+		return;
+
+	/*
+	 * Switching a detached session into a narrower sidebar client would
+	 * otherwise reflow old pane history. Preserve the existing line breaks
+	 * for this one resize; new output will use the new width.
+	 */
+	TAILQ_FOREACH(wp, &w->panes, entry)
+		wp->flags |= PANE_RESIZE_NOREFLOW;
+}
+
+static void
+sidebar_apply_client_selection(struct client *c, int unfocus)
 {
 	struct session	*target;
 
 	target = sidebar_selected_session(c);
 	if (target == NULL) {
-		sidebar_unfocus_client(c);
+		if (unfocus)
+			sidebar_unfocus_client(c);
 		return;
 	}
 	if (target != c->session) {
+		sidebar_prepare_session_switch(c, target);
 		environ_update(target->options, c->environ, target->environ);
 		server_client_set_session(c, target);
-		server_client_set_key_table(c, NULL);
+		if (unfocus)
+			server_client_set_key_table(c, NULL);
 	}
-	sidebar_unfocus_client(c);
+	if (unfocus)
+		sidebar_unfocus_client(c);
 	recalculate_sizes();
 	tty_update_client_offset(c);
 	server_status_client(c);
@@ -281,7 +311,13 @@ sidebar_move_client_selection(struct client *c, int direction)
 void
 sidebar_commit_client_selection(struct client *c)
 {
-	sidebar_commit_client(c);
+	sidebar_apply_client_selection(c, 1);
+}
+
+void
+sidebar_activate_client_selection(struct client *c)
+{
+	sidebar_apply_client_selection(c, 0);
 }
 
 int
@@ -297,18 +333,22 @@ sidebar_handle_key(struct client *c, key_code key)
 	switch (key0) {
 	case 'j':
 		sidebar_move_selection(c, 1);
-		break;
+		sidebar_activate_client_selection(c);
+		return (1);
 	case 'k':
 		sidebar_move_selection(c, -1);
-		break;
+		sidebar_activate_client_selection(c);
+		return (1);
 	case 'g':
 		sidebar_select_first(c);
-		break;
+		sidebar_activate_client_selection(c);
+		return (1);
 	case 'G':
 		sidebar_select_last(c);
-		break;
+		sidebar_activate_client_selection(c);
+		return (1);
 	case C0_CR:
-		sidebar_commit_client(c);
+		sidebar_commit_client_selection(c);
 		return (1);
 	case C0_ESC:
 		sidebar_unfocus_client(c);
@@ -317,7 +357,7 @@ sidebar_handle_key(struct client *c, key_code key)
 		return (0);
 	}
 
-	server_redraw_client(c);
+	server_redraw_sidebar(c);
 	return (1);
 }
 

@@ -562,11 +562,11 @@ screen_redraw_draw_pane_status(struct screen_redraw_ctx *ctx)
 			width = size - x;
 		}
 
-		if (ctx->statustop)
-			yoff += ctx->statuslines;
-		tty_draw_line(tty, s, i, 0, width, x, yoff - ctx->oy,
-		    &grid_default_cell, NULL);
-	}
+			if (ctx->statustop)
+				yoff += ctx->statuslines;
+			tty_draw_line(tty, s, i, 0, width, ctx->xoffset + x,
+			    yoff - ctx->oy, &grid_default_cell, NULL);
+		}
 	tty_cursor(tty, 0, 0);
 }
 
@@ -633,6 +633,7 @@ screen_redraw_set_context(struct client *c, struct screen_redraw_ctx *ctx)
 	ctx->pane_scrollbars_pos = options_get_number(wo,
 	    "pane-scrollbars-position");
 
+	ctx->xoffset = sidebar_client_offset(c, c->tty.sx);
 	tty_window_offset(&c->tty, &ctx->ox, &ctx->oy, &ctx->sx, &ctx->sy);
 
 	log_debug("%s: %s @%u ox=%u oy=%u sx=%u sy=%u %u/%d", __func__, c->name,
@@ -658,6 +659,15 @@ screen_redraw_screen(struct client *c)
 
 	tty_sync_start(&c->tty);
 	tty_update_mode(&c->tty, c->tty.mode, NULL);
+	if ((flags & CLIENT_REDRAWSIDEBAR) &&
+	    (flags & (CLIENT_REDRAWWINDOW|CLIENT_REDRAWBORDERS|
+	    CLIENT_REDRAWSTATUS|CLIENT_REDRAWSTATUSALWAYS|
+	    CLIENT_REDRAWOVERLAY)) == 0)
+		tty_invalidate(&c->tty);
+	if (c->flags & CLIENT_CLEARONREDRAW) {
+		tty_invalidate(&c->tty);
+		tty_putcode(&c->tty, TTYC_CLEAR);
+	}
 	sidebar_draw(&ctx);
 
 	if (flags & (CLIENT_REDRAWWINDOW|CLIENT_REDRAWBORDERS)) {
@@ -683,6 +693,7 @@ screen_redraw_screen(struct client *c)
 	}
 
 	tty_reset(&c->tty);
+	c->flags &= ~CLIENT_CLEARONREDRAW;
 }
 
 /* Redraw a single pane and its scrollbar. */
@@ -864,9 +875,9 @@ screen_redraw_draw_borders_cell(struct screen_redraw_ctx *ctx, u_int i, u_int j)
 		isolates = 0;
 
 	if (ctx->statustop)
-		tty_cursor(tty, i, ctx->statuslines + j);
+		tty_cursor(tty, ctx->xoffset + i, ctx->statuslines + j);
 	else
-		tty_cursor(tty, i, j);
+		tty_cursor(tty, ctx->xoffset + i, j);
 	if (isolates)
 		tty_puts(tty, END_ISOLATE);
 
@@ -893,7 +904,7 @@ screen_redraw_draw_borders(struct screen_redraw_ctx *ctx)
 		wp->border_gc_set = 0;
 
 	for (j = 0; j < c->tty.sy - ctx->statuslines; j++) {
-		for (i = 0; i < c->tty.sx; i++)
+		for (i = 0; i < ctx->sx; i++)
 			screen_redraw_draw_borders_cell(ctx, i, j);
 	}
 }
@@ -994,14 +1005,16 @@ screen_redraw_draw_pane(struct screen_redraw_ctx *ctx, struct window_pane *wp)
 
 		tty_default_colours(&defaults, wp);
 
-		r = tty_check_overlay_range(tty, x, y, width);
-		for (k = 0; k < r->used; k++) {
-			rr = &r->ranges[k];
-			if (rr->nx != 0) {
-				tty_draw_line(tty, s, rr->px - wp->xoff, j,
-				    rr->nx, rr->px, y, &defaults, palette);
+			r = tty_check_overlay_range(tty, ctx->xoffset + x, y, width);
+			for (k = 0; k < r->used; k++) {
+				rr = &r->ranges[k];
+				if (rr->nx != 0) {
+					tty_draw_line(tty, s,
+					    i + rr->px - (ctx->xoffset + x), j,
+					    rr->nx, rr->px, y,
+					    &defaults, palette);
+				}
 			}
-		}
 	}
 
 #ifdef ENABLE_SIXEL
@@ -1119,7 +1132,7 @@ screen_redraw_draw_scrollbar(struct screen_redraw_ctx *ctx,
 			    py < yoff - oy - 1 ||
 			    py >= sy || py < 0)
 				continue;
-			tty_cursor(tty, px, py);
+				tty_cursor(tty, ctx->xoffset + px, py);
 			if ((sb_pos == PANE_SCROLLBARS_LEFT &&
 			    i >= sb_w && i < sb_w + sb_pad) ||
 			    (sb_pos == PANE_SCROLLBARS_RIGHT &&

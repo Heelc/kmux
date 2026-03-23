@@ -10,10 +10,14 @@ TMUX=$TEST_TMUX
 TMP1=$(mktemp)
 TMP2=$(mktemp)
 TMP3=$(mktemp)
+TMP4=$(mktemp)
+SCRIPT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+EXAMPLE_CONF=$SCRIPT_ROOT/example_tmux.conf
 trap '"$TMUX" -Ltest-1 kill-server >/dev/null 2>&1; \
 "$TMUX" -Ltest-2 kill-server >/dev/null 2>&1; \
 "$TMUX" -Ltest-3 kill-server >/dev/null 2>&1; \
-rm -f "$TMP1" "$TMP2" "$TMP3"' 0 1 15
+"$TMUX" -Ltest-4 kill-server >/dev/null 2>&1; \
+rm -f "$TMP1" "$TMP2" "$TMP3" "$TMP4"' 0 1 15
 
 "$TMUX" -Ltest-1 kill-server >/dev/null 2>&1
 "$TMUX" -Ltest-1 -f/dev/null new-session -d -s sidebar-test -x 80 -y 24 \
@@ -59,6 +63,24 @@ OUT3=$("$TMUX" -Ltest-3 -f/dev/null display -t sidebar-test:0 -p '#{window_width
 	2>/dev/null)
 [ "$OUT3" = "21x10" ] || {
 	echo "sidebar tiny clamp failed: $OUT3" >&2
+	exit 1
+}
+
+"$TMUX" -Ltest-4 kill-server >/dev/null 2>&1
+"$TMUX" -Ltest-4 -f/dev/null new-session -d -s sidebar-theme -x 80 -y 24 \
+	'sleep 1000' || exit 1
+"$TMUX" -Ltest-4 -f/dev/null source-file "$EXAMPLE_CONF" >"$TMP4" 2>&1 || {
+	cat "$TMP4" >&2
+	exit 1
+}
+STYLE=$("$TMUX" -Ltest-4 -f/dev/null show-options -gv status-style 2>/dev/null)
+[ "$STYLE" = "fg=#bac2de,bg=#1e1e2e" ] || {
+	echo "example theme status-style failed: $STYLE" >&2
+	exit 1
+}
+ACTIVE_BORDER=$("$TMUX" -Ltest-4 -f/dev/null show-options -gv pane-active-border-style 2>/dev/null)
+[ "$ACTIVE_BORDER" = "fg=#89b4fa" ] || {
+	echo "example theme pane-active-border-style failed: $ACTIVE_BORDER" >&2
 	exit 1
 }
 

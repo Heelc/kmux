@@ -23,7 +23,6 @@
 
 - 不在 MVP 中展开 window/pane 树
 - 不在 MVP 中接入搜索、过滤、tag、preview
-- 不在 MVP 中设计默认快捷键
 - 不在 MVP 中显示 agent 任务完成信息
 - 不在 MVP 中做拖拽、自适应宽度、复杂卡片式信息
 - 不在 MVP 中重构 `mode-tree` 为通用 client 组件
@@ -94,6 +93,14 @@ sidebar 焦点下：
 - 左栏双击：切换到对应 session，并回到右侧 tmux
 - 左栏滚轮：滚动 sidebar 列表，不透传右侧 pane
 - 右侧鼠标：继续由 tmux 原生路径处理
+
+### 4.7 Default Shortcuts
+
+- `Option + s` 进入 sidebar 焦点
+- 若已经在 sidebar 焦点，再按一次 `Option + s` 退出到右侧 pane
+- `Option + Shift + s` 保留原 session chooser：
+  - `choose-tree -s`
+- sidebar 默认常驻开启，`Option + s` 不承担显示/隐藏职责
 
 ## 5. State Model
 
@@ -187,7 +194,9 @@ MVP 只提供最小命令集合：
 - 必须走标准 tmux command/binding 机制
 - 必须能被 `bind-key` 调用
 - 不做只能从内部调用的私有入口
-- 默认快捷键后续单独设计，不并入当前 MVP
+- 当前默认快捷键收敛为：
+  - `M-s -> focus-sidebar`
+  - `M-S -> choose-tree -s`
 
 ## 8. Rendering Architecture
 
@@ -354,5 +363,4 @@ MVP 不做 “把 `mode-tree` 抽成通用 client 侧组件” 的重构。
 - session 分组
 - `window/pane` 树展开
 - agent 任务完成状态标记
-- 默认快捷键设计
 - 更丰富的样式和计数信息

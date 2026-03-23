@@ -45,6 +45,7 @@ int	 sidebar_toggle_client(struct client *);
 void	 sidebar_focus_client(struct client *);
 void	 sidebar_unfocus_client(struct client *);
 void	 sidebar_move_client_selection(struct client *, int);
+void	 sidebar_activate_client_selection(struct client *);
 void	 sidebar_commit_client_selection(struct client *);
 int	 sidebar_handle_key(struct client *, key_code);
 void	 sidebar_draw(struct screen_redraw_ctx *);

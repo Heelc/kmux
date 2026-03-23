@@ -75,7 +75,12 @@ cmd_focus_sidebar_exec(__unused struct cmd *self, struct cmdq_item *item)
 		return (CMD_RETURN_ERROR);
 	}
 
-	sidebar_focus_client(tc);
+	(void)sidebar_client_visible(tc);
+	if (tc->sidebar.focus) {
+		sidebar_unfocus_client(tc);
+		server_client_set_key_table(tc, NULL);
+	} else
+		sidebar_focus_client(tc);
 	recalculate_sizes();
 	tty_update_client_offset(tc);
 	server_redraw_client(tc);

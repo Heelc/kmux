@@ -47,6 +47,12 @@ LEAKED=$($TMUX show-options -gqv @sidebar_white 2>/dev/null)
 	echo "sidebar white-list key leaked: $LEAKED" >&2
 	exit 1
 }
+ACTIVE=$($TMUX list-clients -F '#{client_name} #{session_name}' 2>/dev/null | \
+		sed -n "s/^$CLIENT //p")
+[ "$ACTIVE" = "sidebar-b" ] || {
+	echo "sidebar j did not switch session: $ACTIVE" >&2
+	exit 1
+}
 
 $TMUX send-keys -K -c "$CLIENT" -t sidebar-a:0 x >/dev/null 2>&1 || exit 1
 sleep 0.2
@@ -56,12 +62,33 @@ HIT=$($TMUX show-options -gqv @sidebar_nonwhite 2>/dev/null)
 	exit 1
 }
 
-$TMUX send-keys -K -c "$CLIENT" -t sidebar-a:0 Enter >/dev/null 2>&1 || exit 1
+$TMUX send-keys -K -c "$CLIENT" -t sidebar-a:0 k >/dev/null 2>&1 || exit 1
 sleep 0.2
 ACTIVE=$($TMUX list-clients -F '#{client_name} #{session_name}' 2>/dev/null | \
 		sed -n "s/^$CLIENT //p")
-[ "$ACTIVE" = "sidebar-b" ] || {
-	echo "sidebar enter failed: $ACTIVE" >&2
+[ "$ACTIVE" = "sidebar-a" ] || {
+	echo "sidebar k did not switch session: $ACTIVE" >&2
+	exit 1
+}
+
+$TMUX set-option -gqu @sidebar_white >/dev/null 2>&1 || exit 1
+$TMUX focus-sidebar -c "$CLIENT" >/dev/null 2>&1 || {
+	cat "$TMP" >&2
+	exit 1
+}
+sleep 0.2
+
+$TMUX send-keys -K -c "$CLIENT" -t sidebar-a:0 j >/dev/null 2>&1 || exit 1
+sleep 0.2
+HIT=$($TMUX show-options -gqv @sidebar_white 2>/dev/null)
+[ "$HIT" = "leaked" ] || {
+	echo "focus-sidebar did not exit focus: $HIT" >&2
+	exit 1
+}
+ACTIVE=$($TMUX list-clients -F '#{client_name} #{session_name}' 2>/dev/null | \
+		sed -n "s/^$CLIENT //p")
+[ "$ACTIVE" = "sidebar-a" ] || {
+	echo "focus-sidebar toggle leaked sidebar focus: $ACTIVE" >&2
 	exit 1
 }
 
