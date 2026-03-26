@@ -1,5 +1,22 @@
 # Progress
 
+## 2026-03-26
+
+- 按工作区要求先执行 `git branch -m Heelc/sidebar-audit`，未先查询旧分支名。
+- 重新执行 `bd prime` / `bd ready`，确认当前 ready work 仍指向 `kmux-1n6` Native sidebar MVP。
+- 使用 `planning-with-files` 工作流补读并复核：
+  - `docs/native-sidebar-research.md`
+  - `docs/native-sidebar-prd.md`
+  - 既有 `task_plan.md` / `findings.md` / `progress.md`
+- 通过 git 历史盘点当前分支相对 `master` 的真实增量：
+  - `git log --oneline --no-merges master..HEAD`
+  - `git diff --stat master...HEAD`
+- 确认这条分支不只是文档分支，而是已经落下：
+  - 原生 sidebar MVP
+  - sidebar UX 打磨
+  - 项目示例 tmux 配置迁移
+  - 对应 regression 覆盖
+
 ## 2026-03-20
 
 - 定位 `kmux` 仓库并确认 remote、当前分支与目录结构。

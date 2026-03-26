@@ -7,6 +7,7 @@
 
 ## 当前阶段
 
+- [x] 盘点 `Heelc/sidebar-audit` 相对 `master` 的提交与功能增量
 - [x] 定位 `kmux` 仓库并确认当前分支/remote 状态
 - [x] 建立项目内 planning 文件
 - [x] 输出研究背景文档
@@ -87,6 +88,10 @@
 
 ## 当前执行备注
 
+- 2026-03-26 分支盘点结论：
+  - 相对 `master` 共新增 7 个非 merge 提交
+  - 主体功能不是单纯 PRD，而是已经落地原生 sidebar MVP、交互打磨和示例配置迁移
+  - 代码变更集中在 `sidebar.c/.h`、`cmd-sidebar.c`、`server-client.c`、`screen-redraw.c`、`tty.c`、`options-table.c`、`example_tmux.conf` 与多条 `regress/sidebar-*.sh`
 - `kmux-cr0` 已完成：
   - `j/k/g/G/Enter/Escape` 在 sidebar focus 下由 sidebar 消费
   - 非白名单键继续走 tmux 原生 key binding

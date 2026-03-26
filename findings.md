@@ -1,5 +1,28 @@
 # Findings
 
+## 2026-03-26 分支功能盘点
+
+- 当前分支已重命名为 `Heelc/sidebar-audit`。
+- 相对 `master` 的非 merge 提交共有 7 个：
+  - `701e2514` `docs: add native sidebar research and prd`
+  - `f6e321f6` `chore: initialize bd workflow for native sidebar`
+  - `de651df4` `chore: ignore local worktrees`
+  - `28343c2f` `docs: add sidebar design and implementation plan`
+  - `6a37b8ab` `feat: add native sidebar MVP`
+  - `17b01631` `feat: polish sidebar UX and example config`
+  - `0430f788` `docs: capture sidebar implementation progress`
+- `git diff --stat master...HEAD` 显示新增/修改 45 个文件，约 `4811` 行新增、`108` 行删除。
+- 这条线新增内容可以按 4 类理解：
+  - 产品与技术文档：research、PRD、设计 spec、实现 plan、handoff/progress
+  - issue/workflow 基建：`bd`、`AGENTS.md`、`.worktrees` 忽略规则
+  - 原生 sidebar MVP 实现：状态、命令、绘制、输入、session 切换、终端偏移处理
+  - 体验和分发完善：默认快捷键、示例 tmux 配置拆分、主题和键位迁移
+- 代码证据表明 sidebar 已是可运行功能，而不是停留在设计阶段：
+  - 新增 `sidebar.c` / `sidebar.h`
+  - 新增 `cmd-sidebar.c`
+  - `cmd.c`、`client.c`、`tmux.h`、`options-table.c`、`screen-redraw.c`、`server-client.c`、`tty.c`、`resize.c`、`window.c` 等均有接线
+  - 新增多条 `regress/sidebar-*.sh` 回归脚本
+
 ## 仓库现状
 
 - 仓库路径：`/Users/KaiHe/workspace/ai_prj/kmux`
